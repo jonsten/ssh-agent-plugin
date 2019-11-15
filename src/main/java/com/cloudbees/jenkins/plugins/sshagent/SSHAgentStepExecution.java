@@ -17,6 +17,7 @@ import org.jenkinsci.plugins.workflow.steps.*;
 import javax.annotation.CheckReturnValue;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.*;
@@ -24,18 +25,6 @@ import java.util.*;
 public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
 
     private static final long serialVersionUID = 1L;
-
-    @StepContextParameter
-    private transient TaskListener listener;
-
-    @StepContextParameter
-    private transient Run<?, ?> build;
-
-    @StepContextParameter
-    private transient Launcher launcher;
-
-    @StepContextParameter
-    private transient FilePath workspace;
 
     @Inject(optional = true)
     private SSHAgentStep step;
@@ -71,7 +60,7 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
     public void stop(Throwable cause) throws Exception {
         if (agent != null) {
             agent.stop();
-            listener.getLogger().println(Messages.SSHAgentBuildWrapper_Stopped());
+            getLogger().println(Messages.SSHAgentBuildWrapper_Stopped());
         }
         purgeSockets();
     }
@@ -83,8 +72,12 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
             purgeSockets();
             initRemoteAgent();
         } catch (IOException | InterruptedException x) {
-            listener.getLogger().println(Messages.SSHAgentBuildWrapper_CouldNotStartAgent());
-            x.printStackTrace(listener.getLogger());
+            try {
+                getLogger().println(Messages.SSHAgentBuildWrapper_CouldNotStartAgent());
+                x.printStackTrace(getLogger());
+            } catch (InterruptedException | IOException e) {
+                // At least we tried to tell someone
+            }
         }
     }
 
@@ -135,26 +128,26 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
 
         List<SSHUserPrivateKey> userPrivateKeys = new ArrayList<SSHUserPrivateKey>();
         for (String id : new LinkedHashSet<String>(step.getCredentials())) {
-            final SSHUserPrivateKey c = CredentialsProvider.findCredentialById(id, SSHUserPrivateKey.class, build);
-            CredentialsProvider.track(build, c);
+            final SSHUserPrivateKey c = CredentialsProvider.findCredentialById(id, SSHUserPrivateKey.class, getBuild());
+            CredentialsProvider.track(getBuild(), c);
             if (c == null && !step.isIgnoreMissing()) {
-                listener.fatalError(Messages.SSHAgentBuildWrapper_CredentialsNotFound());
+                getListener().fatalError(Messages.SSHAgentBuildWrapper_CredentialsNotFound());
             }
             if (c != null && !userPrivateKeys.contains(c)) {
                 userPrivateKeys.add(c);
             }
         }
         for (SSHUserPrivateKey userPrivateKey : userPrivateKeys) {
-            listener.getLogger().println(Messages.SSHAgentBuildWrapper_UsingCredentials(SSHAgentBuildWrapper.description(userPrivateKey)));
+            getLogger().println(Messages.SSHAgentBuildWrapper_UsingCredentials(SSHAgentBuildWrapper.description(userPrivateKey)));
         }
 
-        listener.getLogger().println("[ssh-agent] Looking for ssh-agent implementation...");
+        getLogger().println("[ssh-agent] Looking for ssh-agent implementation...");
         Map<String, Throwable> faults = new LinkedHashMap<String, Throwable>();
         for (RemoteAgentFactory factory : Jenkins.getActiveInstance().getExtensionList(RemoteAgentFactory.class)) {
-            if (factory.isSupported(launcher, listener)) {
+            if (factory.isSupported(getLauncher(), getListener())) {
                 try {
-                    listener.getLogger().println("[ssh-agent]   " + factory.getDisplayName());
-                    agent = factory.start(launcher, listener, tempDir(workspace));
+                    getLogger().println("[ssh-agent]   " + factory.getDisplayName());
+                    agent = factory.start(getLauncher(), getListener(), tempDir(getWorkspace()));
                     break;
                 } catch (Throwable t) {
                     faults.put(factory.getDisplayName(), t);
@@ -162,14 +155,14 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
             }
         }
         if (agent == null) {
-            listener.getLogger().println("[ssh-agent] FATAL: Could not find a suitable ssh-agent provider");
-            listener.getLogger().println("[ssh-agent] Diagnostic report");
+            getLogger().println("[ssh-agent] FATAL: Could not find a suitable ssh-agent provider");
+            getLogger().println("[ssh-agent] Diagnostic report");
             for (Map.Entry<String, Throwable> fault : faults.entrySet()) {
-                listener.getLogger().println("[ssh-agent] * " + fault.getKey());
+                getLogger().println("[ssh-agent] * " + fault.getKey());
                 StringWriter sw = new StringWriter();
                 fault.getValue().printStackTrace(new PrintWriter(sw));
                 for (String line : StringUtils.split(sw.toString(), "\n")) {
-                    listener.getLogger().println("[ssh-agent]     " + line);
+                    getLogger().println("[ssh-agent]     " + line);
                 }
             }
             throw new RuntimeException("[ssh-agent] Could not find a suitable ssh-agent provider.");
@@ -183,7 +176,7 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
             }
         }
 
-        listener.getLogger().println(Messages.SSHAgentBuildWrapper_Started());
+        getLogger().println(Messages.SSHAgentBuildWrapper_Started());
         socket = agent.getSocket();
         sockets.add(socket);
     }
@@ -193,10 +186,9 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
      */
     private void cleanUp() throws Exception {
         try {
-            TaskListener listener = getContext().get(TaskListener.class);
             if (agent != null) {
                 agent.stop();
-                listener.getLogger().println(Messages.SSHAgentBuildWrapper_Stopped());
+                getLogger().println(Messages.SSHAgentBuildWrapper_Stopped());
             }
         } finally {
             purgeSockets();
@@ -213,7 +205,11 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
             File socket = new File(it.next());
             if (socket.exists()) {
                 if (!socket.delete()) {
-                    listener.getLogger().format("It was a problem removing this socket file %s", socket.getAbsolutePath());
+                    try {
+                        getLogger().format("It was a problem removing this socket file %s", socket.getAbsolutePath());
+                    } catch (InterruptedException | IOException e) {
+                        // At least we tried to tell someone
+                    }
                 }
             }
             it.remove();
@@ -229,4 +225,63 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
         return socket;
     }
 
+    /**
+     * Retrieves the workspace reference in the current context.
+     *
+     * @return File path object for the workspace
+     *
+     * @throws IOException See {@link StepContext#get(Class)}
+     * @throws InterruptedException See {@link StepContext#get(Class)}
+     */
+    private FilePath getWorkspace() throws IOException, InterruptedException {
+        return getContext().get(FilePath.class);
+    }
+
+    /**
+     * Retrieves the launcher reference in the current context.
+     *
+     * @return Current launcher object
+     *
+     * @throws IOException See {@link StepContext#get(Class)}
+     * @throws InterruptedException See {@link StepContext#get(Class)}
+     */
+    private Launcher getLauncher() throws IOException, InterruptedException {
+        return getContext().get(Launcher.class);
+    }
+
+    /**
+     * Retrieves the build reference in the current context.
+     *
+     * @return Current build/run object
+     *
+     * @throws IOException See {@link StepContext#get(Class)}
+     * @throws InterruptedException See {@link StepContext#get(Class)}
+     */
+    private Run<?, ?> getBuild() throws IOException, InterruptedException {
+        return getContext().get(Run.class);
+    }
+
+    /**
+     * Retrieves the task listener reference in the current context.
+     *
+     * @return Current task listener object
+     *
+     * @throws IOException See {@link StepContext#get(Class)}
+     * @throws InterruptedException See {@link StepContext#get(Class)}
+     */
+    private TaskListener getListener() throws IOException, InterruptedException {
+        return getContext().get(TaskListener.class);
+    }
+
+    /**
+     * Retrieves the logger reference in the current context.
+     *
+     * @return Current logger object
+     *
+     * @throws IOException See {@link StepContext#get(Class)}
+     * @throws InterruptedException See {@link StepContext#get(Class)}
+     */
+    private PrintStream getLogger() throws IOException, InterruptedException {
+        return getListener().getLogger();
+    }
 }
