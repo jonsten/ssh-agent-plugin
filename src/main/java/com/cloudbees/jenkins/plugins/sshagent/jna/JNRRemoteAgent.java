@@ -26,6 +26,7 @@ package com.cloudbees.jenkins.plugins.sshagent.jna;
 
 import com.cloudbees.jenkins.plugins.sshagent.Messages;
 import com.cloudbees.jenkins.plugins.sshagent.RemoteAgent;
+import hudson.Launcher;
 import hudson.model.TaskListener;
 import jenkins.bouncycastle.api.PEMEncodable;
 
@@ -74,7 +75,7 @@ public class JNRRemoteAgent implements RemoteAgent {
     /**
      * {@inheritDoc}
      */
-    public void addIdentity(String privateKey, final String passphrase, String comment) throws IOException {
+    public void addIdentity(String privateKey, final String passphrase, String comment, Launcher launcher) throws IOException {
         try {
             KeyPair keyPair = PEMEncodable.decode(privateKey, passphrase == null ? null : passphrase.toCharArray()).toKeyPair();
             agent.getAgent().addIdentity(keyPair, comment);
@@ -87,7 +88,7 @@ public class JNRRemoteAgent implements RemoteAgent {
     /**
      * {@inheritDoc}
      */
-    public void stop() {
+    public void stop(Launcher launcher) {
         agent.close();
     }
 }

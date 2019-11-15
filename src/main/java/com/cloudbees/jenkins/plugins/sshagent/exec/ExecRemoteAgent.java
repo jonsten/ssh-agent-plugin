@@ -44,8 +44,6 @@ public class ExecRemoteAgent implements RemoteAgent {
     private static final String AuthSocketVar = "SSH_AUTH_SOCK";
     private static final String AgentPidVar = "SSH_AGENT_PID";
     
-    private final Launcher launcher;
-    
     /**
      * The listener in case we need to report exceptions
      */
@@ -62,7 +60,6 @@ public class ExecRemoteAgent implements RemoteAgent {
     private final Map<String, String> agentEnv;
 
     ExecRemoteAgent(Launcher launcher, TaskListener listener, FilePath temp) throws Exception {
-        this.launcher = launcher;
         this.listener = listener;
         this.temp = temp;
 
@@ -70,7 +67,7 @@ public class ExecRemoteAgent implements RemoteAgent {
         if (launcher.launch().cmds("ssh-agent").stdout(baos).start().joinWithTimeout(1, TimeUnit.MINUTES, listener) != 0) {
             throw new AbortException("Failed to run ssh-agent");
         }
-        agentEnv = parseAgentEnv(new String(baos.toByteArray(), StandardCharsets.US_ASCII)); // TODO could include local filenames, better to look up remote charset
+        agentEnv = parseAgentEnv(new String(baos.toByteArray(), StandardCharsets.US_ASCII), listener); // TODO could include local filenames, better to look up remote charset
         
         if (agentEnv.containsKey(AuthSocketVar)) {
             socket = agentEnv.get(AuthSocketVar);
@@ -91,7 +88,7 @@ public class ExecRemoteAgent implements RemoteAgent {
      * {@inheritDoc}
      */
     @Override
-    public void addIdentity(String privateKey, final String passphrase, String comment) throws IOException, InterruptedException {
+    public void addIdentity(String privateKey, final String passphrase, String comment, Launcher launcher) throws IOException, InterruptedException {
         FilePath keyFile = temp.createTextTempFile("private_key_", ".key", privateKey);
         try {
             keyFile.chmod(0600);
@@ -126,7 +123,7 @@ public class ExecRemoteAgent implements RemoteAgent {
      * {@inheritDoc}
      */
     @Override
-    public void stop() throws IOException, InterruptedException {
+    public void stop(Launcher launcher) throws IOException, InterruptedException {
         if (launcher.launch().cmds("ssh-agent", "-k").envs(agentEnv).stdout(listener).start().joinWithTimeout(1, TimeUnit.MINUTES, listener) != 0) {
             throw new AbortException("Failed to run ssh-agent -k");
         }
@@ -135,7 +132,7 @@ public class ExecRemoteAgent implements RemoteAgent {
     /**
      * Parses ssh-agent output.
      */
-    private Map<String,String> parseAgentEnv(String agentOutput) throws Exception{
+    private Map<String,String> parseAgentEnv(String agentOutput, TaskListener listener) throws Exception{
         Map<String, String> env = new HashMap<>();
         
         // get SSH_AUTH_SOCK

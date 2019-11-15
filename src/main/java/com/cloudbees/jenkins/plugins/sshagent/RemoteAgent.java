@@ -24,6 +24,8 @@
 
 package com.cloudbees.jenkins.plugins.sshagent;
 
+import hudson.Launcher;
+
 import java.io.IOException;
 
 /**
@@ -43,12 +45,15 @@ public interface RemoteAgent {
      * @param privateKey the private key.
      * @param passphrase the passphrase or {@code null}.
      * @param comment    the comment to give to the key.
+     * @param launcher the launcher for the remote node.
      * @throws java.io.IOException if something went wrong.
      */
-    void addIdentity(String privateKey, String passphrase, String comment) throws IOException, InterruptedException;
+    void addIdentity(String privateKey, String passphrase, String comment, Launcher launcher) throws IOException, InterruptedException;
 
     /**
      * Stops the agent.
+     *
+     * @param launcher the launcher for the remote node.
      */
-    void stop() throws IOException, InterruptedException;
+    void stop(Launcher launcher) throws IOException, InterruptedException;
 }

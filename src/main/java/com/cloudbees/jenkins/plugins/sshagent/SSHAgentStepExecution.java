@@ -59,7 +59,7 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
     @Override
     public void stop(Throwable cause) throws Exception {
         if (agent != null) {
-            agent.stop();
+            agent.stop(getLauncher());
             getLogger().println(Messages.SSHAgentBuildWrapper_Stopped());
         }
         purgeSockets();
@@ -172,7 +172,7 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
             final Secret passphrase = userPrivateKey.getPassphrase();
             final String effectivePassphrase = passphrase == null ? null : passphrase.getPlainText();
             for (String privateKey : userPrivateKey.getPrivateKeys()) {
-                agent.addIdentity(privateKey, effectivePassphrase, SSHAgentBuildWrapper.description(userPrivateKey));
+                agent.addIdentity(privateKey, effectivePassphrase, SSHAgentBuildWrapper.description(userPrivateKey), getLauncher());
             }
         }
 
@@ -187,7 +187,7 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
     private void cleanUp() throws Exception {
         try {
             if (agent != null) {
-                agent.stop();
+                agent.stop(getLauncher());
                 getLogger().println(Messages.SSHAgentBuildWrapper_Stopped());
             }
         } finally {
