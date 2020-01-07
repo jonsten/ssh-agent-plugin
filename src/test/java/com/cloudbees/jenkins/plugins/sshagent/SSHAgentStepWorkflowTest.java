@@ -161,39 +161,35 @@ public class SSHAgentStepWorkflowTest extends SSHAgentBase {
     @Issue("JENKINS-59259")
     @Test
     public void agentConnectionDropTest() throws Exception {
+        story.then(r -> {
+            List<String> credentialIds = new ArrayList<String>();
+            credentialIds.add(CREDENTIAL_ID);
+            SSHUserPrivateKey key = new BasicSSHUserPrivateKey(CredentialsScope.GLOBAL, credentialIds.get(0), "cloudbees",
+                    new BasicSSHUserPrivateKey.DirectEntryPrivateKeySource(getPrivateKey()), "cloudbees", "test");
+            SystemCredentialsProvider.getInstance().getCredentials().add(key);
+            SystemCredentialsProvider.getInstance().save();
 
-        story.addStep(new Statement() {
-            @Override
-            public void evaluate() throws Throwable {
-                List<String> credentialIds = new ArrayList<String>();
-                credentialIds.add(CREDENTIAL_ID);
-                SSHUserPrivateKey key = new BasicSSHUserPrivateKey(CredentialsScope.GLOBAL, credentialIds.get(0), "cloudbees",
-                        new BasicSSHUserPrivateKey.DirectEntryPrivateKeySource(getPrivateKey()), "cloudbees", "test");
-                SystemCredentialsProvider.getInstance().getCredentials().add(key);
-                SystemCredentialsProvider.getInstance().save();
+            DumbSlave agent = r.createSlave(true);
+            WorkflowJob job = r.jenkins.createProject(WorkflowJob.class, "sshAgentAvailable");
+            job.setDefinition(new CpsFlowDefinition(""
+                    + "node('" + agent.getNodeName() + "') {\n"
+                    + "  sshagent (credentials: ['" + CREDENTIAL_ID + "']) {\n"
+                    + "    semaphore 'upAndRunning'\n"
+                    + "  }\n"
+                    + "}\n", true)
+            );
 
-                DumbSlave agent = story.j.createSlave(true);
-                WorkflowJob job = story.j.jenkins.createProject(WorkflowJob.class, "sshAgentAvailable");
-                job.setDefinition(new CpsFlowDefinition(""
-                        + "node('" + agent.getNodeName() + "') {\n"
-                        + "  sshagent (credentials: ['" + CREDENTIAL_ID + "']) {\n"
-                        + "    semaphore 'upAndRunning'\n"
-                        + "  }\n"
-                        + "}\n", true)
-                );
+            WorkflowRun run = job.scheduleBuild2(0).getStartCondition().get();
 
-                WorkflowRun run = job.scheduleBuild2(0).getStartCondition().get();
+            SemaphoreStep.waitForStart("upAndRunning/1", run);
 
-                SemaphoreStep.waitForStart("upAndRunning/1", run);
+            r.disconnectSlave(agent);
+            r.waitOnline(agent);
 
-                story.j.disconnectSlave(agent);
-                story.j.waitOnline(agent);
+            SemaphoreStep.success("upAndRunning/1", null);
 
-                SemaphoreStep.success("upAndRunning/1", null);
-
-                story.j.waitForCompletion(run);
-                story.j.assertBuildStatusSuccess(run);
-            }
+            r.waitForCompletion(run);
+            r.assertBuildStatusSuccess(run);
         });
     }
 
