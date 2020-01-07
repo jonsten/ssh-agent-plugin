@@ -46,6 +46,11 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
      */
     private transient RemoteAgent agent = null;
 
+    @Inject
+    protected SSHAgentStepExecution(StepContext context) {
+        super(context);
+    }
+
     @Override
     public boolean start() throws Exception {
         StepContext context = getContext();
@@ -68,7 +73,6 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
 
     @Override
     public void onResume() {
-        super.onResume();
         try {
             purgeSockets();
             initRemoteAgent();
