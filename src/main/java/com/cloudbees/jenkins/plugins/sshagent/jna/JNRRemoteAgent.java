@@ -48,10 +48,6 @@ public class JNRRemoteAgent implements RemoteAgent {
      * The socket bound by the agent.
      */
     private final String socket;
-    /**
-     * The listener in case we need to report exceptions
-     */
-    private final TaskListener listener;
 
     /**
      * Constructor.
@@ -60,7 +56,6 @@ public class JNRRemoteAgent implements RemoteAgent {
      * @throws Exception if the agent could not start.
      */
     public JNRRemoteAgent(TaskListener listener, @CheckForNull File temp) throws Exception {
-        this.listener = listener;
         agent = new AgentServer(temp);
         socket = agent.start();
     }
@@ -75,7 +70,8 @@ public class JNRRemoteAgent implements RemoteAgent {
     /**
      * {@inheritDoc}
      */
-    public void addIdentity(String privateKey, final String passphrase, String comment, Launcher launcher) throws IOException {
+    public void addIdentity(String privateKey, final String passphrase, String comment, Launcher launcher,
+                            TaskListener listener) throws IOException {
         try {
             KeyPair keyPair = PEMEncodable.decode(privateKey, passphrase == null ? null : passphrase.toCharArray()).toKeyPair();
             agent.getAgent().addIdentity(keyPair, comment);
@@ -88,7 +84,7 @@ public class JNRRemoteAgent implements RemoteAgent {
     /**
      * {@inheritDoc}
      */
-    public void stop(Launcher launcher) {
+    public void stop(Launcher launcher, TaskListener listener) {
         agent.close();
     }
 }

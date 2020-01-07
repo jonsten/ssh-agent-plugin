@@ -398,7 +398,7 @@ public class SSHAgentBuildWrapper extends BuildWrapper {
             final Secret passphrase = key.getPassphrase();
             final String effectivePassphrase = passphrase == null ? null : passphrase.getPlainText();
             for (String privateKey : key.getPrivateKeys()) {
-                agent.addIdentity(privateKey, effectivePassphrase, description(key), launcher);
+                agent.addIdentity(privateKey, effectivePassphrase, description(key), launcher, launcher.getListener());
             }
         }
 
@@ -417,7 +417,7 @@ public class SSHAgentBuildWrapper extends BuildWrapper {
         public boolean tearDown(AbstractBuild build, BuildListener listener)
                 throws IOException, InterruptedException {
             if (agent != null) {
-                agent.stop(launcher);
+                agent.stop(launcher, listener);
                 listener.getLogger().println(Messages.SSHAgentBuildWrapper_Stopped());
             }
             return true;
