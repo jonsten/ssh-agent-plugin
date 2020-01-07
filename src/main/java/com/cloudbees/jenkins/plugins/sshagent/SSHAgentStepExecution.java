@@ -5,6 +5,7 @@ import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.google.inject.Inject;
 import hudson.EnvVars;
 import hudson.FilePath;
+import hudson.Functions;
 import hudson.Launcher;
 import hudson.model.Run;
 import hudson.model.TaskListener;
@@ -72,12 +73,8 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
             purgeSockets();
             initRemoteAgent();
         } catch (IOException | InterruptedException x) {
-            try {
-                getLogger().println(Messages.SSHAgentBuildWrapper_CouldNotStartAgent());
-                x.printStackTrace(getLogger());
-            } catch (InterruptedException | IOException e) {
-                // At least we tried to tell someone
-            }
+            getLogger().println(Messages.SSHAgentBuildWrapper_CouldNotStartAgent());
+            Functions.printStackTrace(x, getLogger());
         }
     }
 
@@ -206,11 +203,7 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
             File socket = new File(it.next());
             if (socket.exists()) {
                 if (!socket.delete()) {
-                    try {
-                        getLogger().format("It was a problem removing this socket file %s", socket.getAbsolutePath());
-                    } catch (InterruptedException | IOException e) {
-                        // At least we tried to tell someone
-                    }
+                    getLogger().format("It was a problem removing this socket file %s", socket.getAbsolutePath());
                 }
             }
             it.remove();
@@ -263,26 +256,26 @@ public class SSHAgentStepExecution extends AbstractStepExecutionImpl {
     }
 
     /**
-     * Retrieves the task listener reference in the current context.
+     * Retrieves the task listener reference in the current context or NULL
+     * listener if there is no listener in current context.
      *
      * @return Current task listener object
-     *
-     * @throws IOException See {@link StepContext#get(Class)}
-     * @throws InterruptedException See {@link StepContext#get(Class)}
      */
-    private TaskListener getListener() throws IOException, InterruptedException {
-        return getContext().get(TaskListener.class);
+    private TaskListener getListener() {
+        try {
+            return getContext().get(TaskListener.class);
+        } catch (IOException | InterruptedException e) {
+            return TaskListener.NULL;
+        }
     }
 
     /**
-     * Retrieves the logger reference in the current context.
+     * Retrieves the logger reference in the current context or NULL logger
+     * if there is no logger in current context.
      *
      * @return Current logger object
-     *
-     * @throws IOException See {@link StepContext#get(Class)}
-     * @throws InterruptedException See {@link StepContext#get(Class)}
      */
-    private PrintStream getLogger() throws IOException, InterruptedException {
+    private PrintStream getLogger() {
         return getListener().getLogger();
     }
 }
